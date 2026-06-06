@@ -1,0 +1,39 @@
+{
+  "name": "omp-autocompact-pct",
+  "version": "0.1.0",
+  "type": "module",
+  "private": false,
+  "description": "OMP extension that displays auto-compaction threshold headroom from provider usage.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YanzuoLu/omp-autocompact-pct.git"
+  },
+  "homepage": "https://github.com/YanzuoLu/omp-autocompact-pct#readme",
+  "bugs": {
+    "url": "https://github.com/YanzuoLu/omp-autocompact-pct/issues"
+  },
+  "keywords": [
+    "omp",
+    "oh-my-pi",
+    "extension",
+    "compaction",
+    "statusline"
+  ],
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "omp": {
+    "name": "Auto Compact Percent",
+    "description": "Displays auto-compaction threshold usage and remaining headroom from the last provider response.",
+    "extensions": ["src/index.ts"]
+  },
+  "scripts": {
+    "check": "bun build ./src/index.ts --target=bun --external @oh-my-pi/pi-coding-agent --outfile /tmp/omp-autocompact-pct-check.js",
+    "pack:dry": "bun pm pack --dry-run"
+  },
+  "peerDependencies": {
+    "@oh-my-pi/pi-coding-agent": ">=15.9.67 <16"
+  }
+}
