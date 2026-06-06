@@ -1,6 +1,6 @@
 {
   "name": "omp-autocompact-pct",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "private": false,
   "description": "OMP extension that displays auto-compaction threshold headroom from provider usage.",
@@ -30,7 +30,7 @@
     "extensions": ["src/index.ts"]
   },
   "scripts": {
-    "check": "bun build ./src/index.ts --target=bun --external @oh-my-pi/pi-coding-agent --outfile /tmp/omp-autocompact-pct-check.js",
+    "check": "bun build ./src/index.ts --target=bun --external @oh-my-pi/pi-coding-agent --external '@oh-my-pi/pi-coding-agent/*' --outfile /tmp/omp-autocompact-pct-check.js",
     "pack:dry": "bun pm pack --dry-run"
   },
   "peerDependencies": {

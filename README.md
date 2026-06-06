@@ -20,27 +20,58 @@ omp plugin list
 
 Restart OMP after install.
 
-## What it displays
+## Statusline segment
 
-The plugin writes a hook status line below the main statusline, for example:
+The plugin registers a statusline segment named `autocompact_pct`.
+
+Add it to a custom statusline layout:
+
+```yaml
+statusLine:
+  preset: custom
+  separator: powerline
+  leftSegments:
+    - pi
+    - hostname
+    - model
+    - mode
+    - path
+    - git
+    - pr
+    - subagents
+  rightSegments:
+    - session_name
+    - autocompact_pct
+    - cache_hit
+    - token_in
+    - token_out
+    - token_rate
+    - cache_read
+    - cost
+    - context_pct
+```
+
+It renders compactly inside the main statusline:
 
 ```text
-AC 86.2% +12.3K left (199K/231K)
-AC 101.2% 2.8K over (234K/231K)
-AC compacting threshold/context-full
-AC compacted from 234K; waiting next usage
+AC 86.2% +12.3K
+AC 101.2% -2.8K
+AC compacting threshold
+AC compacted
 ```
 
 Meaning:
 
 ```text
-AC <last-provider-totalTokens / auto-compaction-threshold> <headroom> (<used>/<threshold>)
+AC <last-provider-totalTokens / auto-compaction-threshold> <remaining tokens before threshold>
 ```
 
 This is intentionally different from OMP's built-in `context_pct` segment:
 
 - `context_pct` = local estimate of active conversation footprint / model context window.
-- `omp-autocompact-pct` = last provider usage / OMP auto-compaction threshold.
+- `autocompact_pct` = last provider usage / OMP auto-compaction threshold.
+
+Implementation note: OMP does not currently expose a public `registerStatusLineSegment` API, so this extension registers the segment through OMP's exported statusline registry. If OMP changes that internal registry before `16.x`, this plugin may need an update.
 
 ## Slash command
 
@@ -53,12 +84,6 @@ Refresh the status manually:
 ## Requirements
 
 - OMP / `@oh-my-pi/pi-coding-agent` `>=15.9.67 <16`
-- Hook status display enabled:
-
-```yaml
-statusLine:
-  showHookStatus: true
-```
 
 ## Update
 
