@@ -3,8 +3,6 @@ import { ALL_SEGMENT_IDS, SEGMENTS } from "@oh-my-pi/pi-coding-agent/modes/compo
 
 const SEGMENT_ID = "autocompact_pct";
 const RENDER_INVALIDATE_KEY = "omp-autocompact-pct-render";
-const DEFAULT_RESERVE_TOKENS = 16_384;
-const DEFAULT_RESERVE_FRACTION = 0.15;
 
 type UsageLike = {
   input?: number;
@@ -14,13 +12,6 @@ type UsageLike = {
   totalTokens?: number;
 };
 
-type CompactionSettingsLike = {
-  enabled?: boolean;
-  strategy?: "context-full" | "handoff" | "shake" | "off" | string;
-  thresholdPercent?: number;
-  thresholdTokens?: number;
-  reserveTokens?: number;
-};
 
 type ContextUsageLike = {
   contextWindow: number;
@@ -49,11 +40,11 @@ type SegmentContextLike = {
     sessionManager?: SessionManagerLike;
   };
   contextWindow?: number;
+  autoCompactEnabled?: boolean;
 };
 
 type RenderSource = RuntimeContextLike | SegmentContextLike;
 
-type RenderedSegmentLike = { content: string; visible: boolean };
 
 type RelevantEntry =
   | { kind: "usage"; usage: UsageLike; stopReason?: string }
@@ -79,50 +70,8 @@ function calculateContextTokens(usage: UsageLike): number {
   return finiteNumber(usage.input) + finiteNumber(usage.output) + finiteNumber(usage.cacheRead) + finiteNumber(usage.cacheWrite);
 }
 
-function resolveThresholdTokens(contextWindow: number, settings: CompactionSettingsLike): number | undefined {
-  if (!settings.enabled || settings.strategy === "off" || contextWindow <= 0) return undefined;
-
-  const thresholdTokens = positiveNumber(settings.thresholdTokens);
-  if (thresholdTokens !== undefined) {
-    return Math.min(contextWindow - 1, Math.max(1, thresholdTokens));
-  }
-
-  const thresholdPercent = positiveNumber(settings.thresholdPercent);
-  if (thresholdPercent !== undefined) {
-    const clamped = Math.min(99, Math.max(1, thresholdPercent));
-    return Math.floor(contextWindow * (clamped / 100));
-  }
-
-  const configuredReserve = positiveNumber(settings.reserveTokens) ?? DEFAULT_RESERVE_TOKENS;
-  const reserve = Math.max(Math.floor(contextWindow * DEFAULT_RESERVE_FRACTION), configuredReserve);
-  return Math.max(1, contextWindow - reserve);
-}
-
-function readCompactionSettings(pi: ExtensionAPI): CompactionSettingsLike {
-  try {
-    const exported = pi.pi as { settings?: { getGroup?(prefix: "compaction"): unknown } };
-    const group = asRecord(exported.settings?.getGroup?.("compaction"));
-    if (!group) return defaultCompactionSettings();
-    return {
-      enabled: typeof group.enabled === "boolean" ? group.enabled : true,
-      strategy: typeof group.strategy === "string" ? group.strategy : "context-full",
-      thresholdPercent: finiteNumber(group.thresholdPercent),
-      thresholdTokens: finiteNumber(group.thresholdTokens),
-      reserveTokens: finiteNumber(group.reserveTokens) || DEFAULT_RESERVE_TOKENS,
-    };
-  } catch {
-    return defaultCompactionSettings();
-  }
-}
-
-function defaultCompactionSettings(): CompactionSettingsLike {
-  return {
-    enabled: true,
-    strategy: "context-full",
-    thresholdPercent: -1,
-    thresholdTokens: -1,
-    reserveTokens: DEFAULT_RESERVE_TOKENS,
-  };
+function autoCompactSuffix(source: RenderSource): string {
+  return (source as SegmentContextLike).autoCompactEnabled ? " ⟲" : "";
 }
 
 function contextWindowFor(source: RenderSource): number {
@@ -194,52 +143,46 @@ function formatTokens(tokens: number): string {
 }
 
 function formatPercent(value: number): string {
-  return `${trimNumber(value, value >= 100 ? 1 : 2)}%`;
+  return `${trimNumber(value, 1)}%`;
 }
 
-function usageStats(usage: UsageLike, source: RenderSource, pi: ExtensionAPI): { used: number; threshold: number; headroom: number; pct: number } | undefined {
+function providerWindowStats(usage: UsageLike, source: RenderSource): { used: number; contextWindow: number; pct: number } | undefined {
   const contextWindow = contextWindowFor(source);
   if (contextWindow <= 0) return undefined;
 
-  const threshold = resolveThresholdTokens(contextWindow, readCompactionSettings(pi));
-  if (threshold === undefined) return undefined;
-
   const used = calculateContextTokens(usage);
-  const headroom = threshold - used;
-  return { used, threshold, headroom, pct: threshold > 0 ? (used / threshold) * 100 : 0 };
+  return { used, contextWindow, pct: (used / contextWindow) * 100 };
 }
 
-function renderCompactUsageStatus(usage: UsageLike, source: RenderSource, pi: ExtensionAPI): string | undefined {
-  const stats = usageStats(usage, source, pi);
-  if (!stats) return "AC off";
-  const signedHeadroom = stats.headroom >= 0 ? `+${formatTokens(stats.headroom)}` : formatTokens(stats.headroom);
-  return `AC ${formatPercent(stats.pct)} ${signedHeadroom}`;
+function renderCompactUsageStatus(usage: UsageLike, source: RenderSource): string | undefined {
+  const stats = providerWindowStats(usage, source);
+  if (!stats) return undefined;
+  return `◫ ${formatPercent(stats.pct)}/${formatTokens(stats.contextWindow)}${autoCompactSuffix(source)}`;
 }
 
-function renderDetailedUsageStatus(usage: UsageLike, source: RenderSource, pi: ExtensionAPI): string {
-  const stats = usageStats(usage, source, pi);
-  if (!stats) return "AC off";
-  const status = stats.headroom >= 0 ? `+${formatTokens(stats.headroom)} left` : `${formatTokens(-stats.headroom)} over`;
-  return `AC ${formatPercent(stats.pct)} ${status} (${formatTokens(stats.used)}/${formatTokens(stats.threshold)})`;
+function renderDetailedUsageStatus(usage: UsageLike, source: RenderSource): string {
+  const stats = providerWindowStats(usage, source);
+  if (!stats) return "Provider context usage unavailable";
+  return `Provider context ${formatPercent(stats.pct)}/${formatTokens(stats.contextWindow)} (${formatTokens(stats.used)} used)`;
 }
 
-function renderLatestSegment(source: RenderSource, pi: ExtensionAPI): string | undefined {
+function renderLatestSegment(source: RenderSource): string | undefined {
   if (transientText) return transientText;
 
   const latest = latestRelevantEntry(source);
   if (!latest) return undefined;
-  if (latest.kind === "compaction") return "AC waiting";
-  return renderCompactUsageStatus(latest.usage, source, pi);
+  if (latest.kind === "compaction") return "◫ waiting";
+  return renderCompactUsageStatus(latest.usage, source);
 }
 
-function renderLatestDetail(source: RenderSource, pi: ExtensionAPI): string {
+function renderLatestDetail(source: RenderSource): string {
   const latest = latestRelevantEntry(source);
-  if (!latest) return "AC usage pending";
+  if (!latest) return "Provider context usage pending";
   if (latest.kind === "compaction") {
     const suffix = latest.tokensBefore ? ` from ${formatTokens(latest.tokensBefore)}` : "";
-    return `AC compacted${suffix}; waiting next provider usage`;
+    return `Provider context compacted${suffix}; waiting next provider usage`;
   }
-  return renderDetailedUsageStatus(latest.usage, source, pi);
+  return renderDetailedUsageStatus(latest.usage, source);
 }
 
 function clearTransientAndInvalidate(ctx: RuntimeContextLike): void {
@@ -255,14 +198,13 @@ function registerStatusLineSegment(pi: ExtensionAPI): boolean {
   SEGMENTS[SEGMENT_ID] = {
     id: SEGMENT_ID,
     render(ctx: SegmentContextLike) {
-      const content = renderLatestSegment(ctx, pi);
+      const content = renderLatestSegment(ctx);
       return { content: content ?? "", visible: content !== undefined };
     },
   } as (typeof SEGMENTS)[keyof typeof SEGMENTS];
 
   const segmentIds = ALL_SEGMENT_IDS as string[];
   if (!segmentIds.includes(SEGMENT_ID)) segmentIds.push(SEGMENT_ID);
-
   return true;
 }
 
@@ -290,8 +232,8 @@ export default function autocompactPct(pi: ExtensionAPI) {
     clearTransientAndInvalidate(ctx);
   });
 
-  pi.on("auto_compaction_start", (event, ctx) => {
-    transientText = `AC compacting ${event.reason}`;
+  pi.on("auto_compaction_start", (_event, ctx) => {
+    transientText = "◫ compacting";
     invalidate(ctx);
   });
 
@@ -301,24 +243,24 @@ export default function autocompactPct(pi: ExtensionAPI) {
       return;
     }
     if (event.aborted || event.errorMessage) {
-      transientText = "AC compact failed";
+      transientText = "◫ compact failed";
       invalidate(ctx);
       return;
     }
-    transientText = "AC compacted";
+    transientText = "◫ compacted";
     invalidate(ctx);
   });
 
   pi.on("session_compact", (_event, ctx) => {
-    transientText = "AC compacted";
+    transientText = "◫ compacted";
     invalidate(ctx);
   });
 
   pi.registerCommand("autocompact-pct", {
-    description: "Refresh and print the auto-compaction threshold headroom status.",
+    description: "Refresh and print the provider context-window usage status.",
     handler: async (_args, ctx) => {
       clearTransientAndInvalidate(ctx);
-      ctx.ui.notify?.(renderLatestDetail(ctx, pi), "info");
+      ctx.ui.notify?.(renderLatestDetail(ctx), "info");
     },
   });
 }

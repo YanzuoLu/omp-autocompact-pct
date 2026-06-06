@@ -1,8 +1,8 @@
 # omp-autocompact-pct
 
-OMP extension that shows how close the last provider response was to the auto-compaction threshold.
+OMP statusline segment that replaces the built-in local `context_pct` estimate with provider-reported context usage.
 
-Use this when `context_pct` is misleading for auto-compaction timing. This plugin reads the last assistant `usage.totalTokens` and compares it with OMP's effective compaction threshold.
+Use this when you want the statusline percentage to be based on the last assistant response's `usage.totalTokens` divided by the model context window, such as `234028 / 272000`.
 
 ## Install
 
@@ -24,8 +24,7 @@ Restart OMP after install.
 
 The plugin registers a statusline segment named `autocompact_pct`.
 
-Add it to a custom statusline layout:
-
+Add it to a custom statusline layout in place of `context_pct`:
 ```yaml
 statusLine:
   preset: custom
@@ -48,28 +47,26 @@ statusLine:
     - token_rate
     - cache_read
     - cost
-    - context_pct
 ```
 
-It renders compactly inside the main statusline:
+It renders like the built-in context segment, but uses provider usage:
 
 ```text
-AC 86.2% +12.3K
-AC 101.2% -2.8K
-AC compacting threshold
-AC compacted
+◫ 86%/272K ⟲
+◫ compacting
+◫ compacted
 ```
 
 Meaning:
 
 ```text
-AC <last-provider-totalTokens / auto-compaction-threshold> <remaining tokens before threshold>
+◫ <last-provider-totalTokens / model-contextWindow>/<model-contextWindow>
 ```
 
 This is intentionally different from OMP's built-in `context_pct` segment:
 
 - `context_pct` = local estimate of active conversation footprint / model context window.
-- `autocompact_pct` = last provider usage / OMP auto-compaction threshold.
+- `autocompact_pct` = last provider `usage.totalTokens` / model context window.
 
 Implementation note: OMP does not currently expose a public `registerStatusLineSegment` API, so this extension registers the segment through OMP's exported statusline registry. If OMP changes that internal registry before `16.x`, this plugin may need an update.
 
@@ -90,14 +87,14 @@ Refresh the status manually:
 Install the current tagged release:
 
 ```sh
-omp plugin install github:YanzuoLu/omp-autocompact-pct#v0.2.0
+omp plugin install github:YanzuoLu/omp-autocompact-pct#v0.3.0
 ```
 
 If OMP keeps an older git dependency in its plugin lock, remove it first:
 
 ```sh
 omp plugin uninstall omp-autocompact-pct
-omp plugin install github:YanzuoLu/omp-autocompact-pct#v0.2.0
+omp plugin install github:YanzuoLu/omp-autocompact-pct#v0.3.0
 ```
 
 ## Uninstall

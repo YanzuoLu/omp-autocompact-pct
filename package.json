@@ -1,9 +1,9 @@
 {
   "name": "omp-autocompact-pct",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "private": false,
-  "description": "OMP extension that displays auto-compaction threshold headroom from provider usage.",
+  "description": "OMP statusline segment that shows provider-reported context usage.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -26,7 +26,7 @@
   ],
   "omp": {
     "name": "Auto Compact Percent",
-    "description": "Displays auto-compaction threshold usage and remaining headroom from the last provider response.",
+    "description": "Displays provider-reported context-window usage from the last assistant response.",
     "extensions": ["src/index.ts"]
   },
   "scripts": {
