@@ -1,5 +1,7 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { ALL_SEGMENT_IDS, SEGMENTS } from "@oh-my-pi/pi-coding-agent/modes/components/status-line";
+import { formatContextUsage, getContextUsageLevel, getContextUsageThemeColor } from "@oh-my-pi/pi-coding-agent/modes/components/status-line/context-thresholds";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 
 const SEGMENT_ID = "autocompact_pct";
 const RENDER_INVALIDATE_KEY = "omp-autocompact-pct-render";
@@ -70,8 +72,27 @@ function calculateContextTokens(usage: UsageLike): number {
   return finiteNumber(usage.input) + finiteNumber(usage.output) + finiteNumber(usage.cacheRead) + finiteNumber(usage.cacheWrite);
 }
 
+function currentTheme() {
+  return theme as typeof theme | undefined;
+}
+
 function autoCompactSuffix(source: RenderSource): string {
-  return (source as SegmentContextLike).autoCompactEnabled ? " ⟲" : "";
+  const activeTheme = currentTheme();
+  return (source as SegmentContextLike).autoCompactEnabled && activeTheme?.icon.auto ? ` ${activeTheme.icon.auto}` : "";
+}
+
+function withIcon(icon: string | undefined, text: string): string {
+  return icon ? `${icon} ${text}` : text;
+}
+
+function renderContextContent(text: string, pct?: number, contextWindow?: number): string {
+  const activeTheme = currentTheme();
+  if (!activeTheme) return withIcon("◫", text);
+
+  const color = pct === undefined || contextWindow === undefined
+    ? "statusLineContext"
+    : getContextUsageThemeColor(getContextUsageLevel(pct, contextWindow));
+  return withIcon(activeTheme.icon.context, activeTheme.fg(color, text));
 }
 
 function contextWindowFor(source: RenderSource): number {
@@ -157,7 +178,8 @@ function providerWindowStats(usage: UsageLike, source: RenderSource): { used: nu
 function renderCompactUsageStatus(usage: UsageLike, source: RenderSource): string | undefined {
   const stats = providerWindowStats(usage, source);
   if (!stats) return undefined;
-  return `◫ ${formatPercent(stats.pct)}/${formatTokens(stats.contextWindow)}${autoCompactSuffix(source)}`;
+  const text = `${formatContextUsage(stats.pct, stats.contextWindow)}${autoCompactSuffix(source)}`;
+  return renderContextContent(text, stats.pct, stats.contextWindow);
 }
 
 function renderDetailedUsageStatus(usage: UsageLike, source: RenderSource): string {
@@ -167,11 +189,11 @@ function renderDetailedUsageStatus(usage: UsageLike, source: RenderSource): stri
 }
 
 function renderLatestSegment(source: RenderSource): string | undefined {
-  if (transientText) return transientText;
+  if (transientText) return renderContextContent(transientText);
 
   const latest = latestRelevantEntry(source);
   if (!latest) return undefined;
-  if (latest.kind === "compaction") return "◫ waiting";
+  if (latest.kind === "compaction") return renderContextContent("waiting");
   return renderCompactUsageStatus(latest.usage, source);
 }
 
@@ -233,7 +255,7 @@ export default function autocompactPct(pi: ExtensionAPI) {
   });
 
   pi.on("auto_compaction_start", (_event, ctx) => {
-    transientText = "◫ compacting";
+    transientText = "compacting";
     invalidate(ctx);
   });
 
@@ -243,16 +265,16 @@ export default function autocompactPct(pi: ExtensionAPI) {
       return;
     }
     if (event.aborted || event.errorMessage) {
-      transientText = "◫ compact failed";
+      transientText = "compact failed";
       invalidate(ctx);
       return;
     }
-    transientText = "◫ compacted";
+    transientText = "compacted";
     invalidate(ctx);
   });
 
   pi.on("session_compact", (_event, ctx) => {
-    transientText = "◫ compacted";
+    transientText = "compacted";
     invalidate(ctx);
   });
 

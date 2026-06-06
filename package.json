@@ -1,9 +1,9 @@
 {
   "name": "omp-autocompact-pct",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "private": false,
-  "description": "OMP statusline segment that shows provider-reported context usage.",
+  "description": "OMP statusline segment that shows provider-reported context usage with native context colors.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -26,7 +26,7 @@
   ],
   "omp": {
     "name": "Auto Compact Percent",
-    "description": "Displays provider-reported context-window usage from the last assistant response.",
+    "description": "Displays provider-reported context-window usage using the native context segment colors.",
     "extensions": ["src/index.ts"]
   },
   "scripts": {

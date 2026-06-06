@@ -49,13 +49,15 @@ statusLine:
     - cost
 ```
 
-It renders like the built-in context segment, but uses provider usage:
+It renders like the built-in context segment, uses the same context colors, but uses provider usage:
 
 ```text
-◫ 86%/272K ⟲
+◫ 86.0%/272K ⟲
 ◫ compacting
 ◫ compacted
 ```
+
+Color thresholds match `context_pct`: normal, warning, purple, and error are selected with OMP's built-in context threshold helper.
 
 Meaning:
 
@@ -87,14 +89,14 @@ Refresh the status manually:
 Install the current tagged release:
 
 ```sh
-omp plugin install github:YanzuoLu/omp-autocompact-pct#v0.3.0
+omp plugin install github:YanzuoLu/omp-autocompact-pct#v0.4.0
 ```
 
 If OMP keeps an older git dependency in its plugin lock, remove it first:
 
 ```sh
 omp plugin uninstall omp-autocompact-pct
-omp plugin install github:YanzuoLu/omp-autocompact-pct#v0.3.0
+omp plugin install github:YanzuoLu/omp-autocompact-pct#v0.4.0
 ```
 
 ## Uninstall
