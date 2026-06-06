@@ -87,10 +87,17 @@ Refresh the status manually:
 
 ## Update
 
-Re-run install:
+Install the current tagged release:
 
 ```sh
-omp plugin install github:YanzuoLu/omp-autocompact-pct
+omp plugin install github:YanzuoLu/omp-autocompact-pct#v0.2.0
+```
+
+If OMP keeps an older git dependency in its plugin lock, remove it first:
+
+```sh
+omp plugin uninstall omp-autocompact-pct
+omp plugin install github:YanzuoLu/omp-autocompact-pct#v0.2.0
 ```
 
 ## Uninstall
