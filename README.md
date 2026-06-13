@@ -70,7 +70,7 @@ This is intentionally different from OMP's built-in `context_pct` segment:
 - `context_pct` = local estimate of active conversation footprint / model context window.
 - `autocompact_pct` = last provider `usage.totalTokens` / model context window.
 
-Implementation note: OMP does not currently expose a public `registerStatusLineSegment` API, so this extension registers the segment through OMP's exported statusline registry. If OMP changes that internal registry before `16.x`, this plugin may need an update.
+Implementation note: OMP does not currently expose a public `registerStatusLineSegment` API, so this extension registers the segment by mutating OMP's statusline registry. Because OMP ships as a single bundled binary, the registry must be reached through the injected runtime namespace (`pi.pi`, the host's own module instances) — a plain `import` of the registry resolves to a *separate* on-disk copy that OMP never renders from, so the segment would silently never appear (fixed in 0.5.0; falls back to the imported registry only in source-mode/tests). If OMP changes that internal registry before `16.x`, this plugin may need an update.
 
 ## Slash command
 

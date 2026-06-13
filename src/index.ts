@@ -54,6 +54,34 @@ type RelevantEntry =
 
 let transientText: string | undefined;
 
+// omp ships as a single `// @bun` bundle: its `SEGMENTS`/`theme`/context-threshold
+// modules live INSIDE the bundle, so the copies we `import` above resolve to a
+// separate on-disk package and are DIFFERENT module instances. Mutating the
+// imported `SEGMENTS` registers the segment into a registry omp never renders
+// from — which is why the segment shows nothing. The factory's `pi.pi` is omp's
+// OWN runtime namespace (the exact instance it renders with), so we prefer it for
+// every host binding and only fall back to the static imports for source-mode /
+// tests where the two coincide.
+type OmpRuntime = {
+	SEGMENTS: typeof SEGMENTS;
+	ALL_SEGMENT_IDS: typeof ALL_SEGMENT_IDS;
+	theme: typeof theme;
+	formatContextUsage: typeof formatContextUsage;
+	getContextUsageLevel: typeof getContextUsageLevel;
+	getContextUsageThemeColor: typeof getContextUsageThemeColor;
+};
+let runtime: Partial<OmpRuntime> = {};
+
+const hostSegments = (): typeof SEGMENTS => runtime.SEGMENTS ?? SEGMENTS;
+const hostSegmentIds = (): string[] => (runtime.ALL_SEGMENT_IDS ?? ALL_SEGMENT_IDS) as string[];
+const hostTheme = (): typeof theme | undefined => runtime.theme ?? theme;
+const hostFormatContextUsage: typeof formatContextUsage = (...args) =>
+	(runtime.formatContextUsage ?? formatContextUsage)(...args);
+const hostGetContextUsageLevel: typeof getContextUsageLevel = (...args) =>
+	(runtime.getContextUsageLevel ?? getContextUsageLevel)(...args);
+const hostGetContextUsageThemeColor: typeof getContextUsageThemeColor = (...args) =>
+	(runtime.getContextUsageThemeColor ?? getContextUsageThemeColor)(...args);
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
 }
@@ -73,7 +101,7 @@ function calculateContextTokens(usage: UsageLike): number {
 }
 
 function currentTheme() {
-  return theme as typeof theme | undefined;
+  return hostTheme();
 }
 
 function autoCompactSuffix(source: RenderSource): string {
@@ -91,7 +119,7 @@ function renderContextContent(text: string, pct?: number, contextWindow?: number
 
   const color = pct === undefined || contextWindow === undefined
     ? "statusLineContext"
-    : getContextUsageThemeColor(getContextUsageLevel(pct, contextWindow));
+    : hostGetContextUsageThemeColor(hostGetContextUsageLevel(pct, contextWindow));
   return withIcon(activeTheme.icon.context, activeTheme.fg(color, text));
 }
 
@@ -178,7 +206,7 @@ function providerWindowStats(usage: UsageLike, source: RenderSource): { used: nu
 function renderCompactUsageStatus(usage: UsageLike, source: RenderSource): string | undefined {
   const stats = providerWindowStats(usage, source);
   if (!stats) return undefined;
-  const text = `${formatContextUsage(stats.pct, stats.contextWindow)}${autoCompactSuffix(source)}`;
+  const text = `${hostFormatContextUsage(stats.pct, stats.contextWindow)}${autoCompactSuffix(source)}`;
   return renderContextContent(text, stats.pct, stats.contextWindow);
 }
 
@@ -216,8 +244,9 @@ function invalidate(ctx: RuntimeContextLike): void {
   ctx.ui?.setStatus(RENDER_INVALIDATE_KEY, undefined);
 }
 
-function registerStatusLineSegment(pi: ExtensionAPI): boolean {
-  SEGMENTS[SEGMENT_ID] = {
+function registerStatusLineSegment(_pi: ExtensionAPI): boolean {
+  const segments = hostSegments();
+  segments[SEGMENT_ID] = {
     id: SEGMENT_ID,
     render(ctx: SegmentContextLike) {
       const content = renderLatestSegment(ctx);
@@ -225,13 +254,18 @@ function registerStatusLineSegment(pi: ExtensionAPI): boolean {
     },
   } as (typeof SEGMENTS)[keyof typeof SEGMENTS];
 
-  const segmentIds = ALL_SEGMENT_IDS as string[];
+  const segmentIds = hostSegmentIds();
   if (!segmentIds.includes(SEGMENT_ID)) segmentIds.push(SEGMENT_ID);
   return true;
 }
 
 export default function autocompactPct(pi: ExtensionAPI) {
   pi.setLabel("Auto Compact Percent");
+
+  // Bind to omp's OWN runtime exports (same module instances it renders with).
+  // `pi.pi` is the injected `@oh-my-pi/pi-coding-agent` namespace; the bare
+  // `import`s at the top of this file resolve to a separate bundled copy.
+  runtime = ((pi as unknown as { pi?: Partial<OmpRuntime> }).pi) ?? {};
 
   if (!registerStatusLineSegment(pi)) {
     pi.logger.warn("omp-autocompact-pct could not register status line segment", { segment: SEGMENT_ID });
